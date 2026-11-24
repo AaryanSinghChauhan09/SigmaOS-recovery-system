@@ -14,6 +14,9 @@ pub enum RecoveryError {
     #[error("WalkDir error: {0}")]
     WalkDir(#[from] walkdir::Error),
     
+    #[error("StripPrefix error: {0}")]
+    StripPrefix(#[from] std::path::StripPrefixError),
+    
     #[error("Recovery error: {0}")]
     Recovery(String),
     

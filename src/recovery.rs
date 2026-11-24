@@ -2,10 +2,8 @@ use crate::error::RecoveryError;
 use crate::snapshot::Snapshot;
 use crate::restore::RestoreManager;
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::fs;
-use sha2::{Sha256, Digest};
-use hex;
 use walkdir::WalkDir;
 
 pub struct RecoveryManager {
@@ -15,10 +13,9 @@ pub struct RecoveryManager {
 
 impl RecoveryManager {
     pub fn new() -> Result<Self, RecoveryError> {
-        let snapshot_dir = directories::data_dir()
-            .unwrap_or_else(|| PathBuf::from("~"))
-            .join("sigmaos")
-            .join("snapshots");
+        let snapshot_dir = directories::ProjectDirs::from("org", "sigmaos", "sigmaos")
+            .map(|p| p.data_dir().join("snapshots"))
+            .unwrap_or_else(|| PathBuf::from("~/.local/share/sigmaos/snapshots"));
         
         fs::create_dir_all(&snapshot_dir)?;
         
@@ -29,13 +26,11 @@ impl RecoveryManager {
     }
     
     pub fn create_snapshot(&self, name: &str, description: Option<String>, include_user_data: bool, include_packages: bool) -> Result<Snapshot, RecoveryError> {
-        // Generate snapshot ID
         let id = self.generate_snapshot_id()?;
         let snapshot_path = self.snapshot_dir.join(&id);
         
         fs::create_dir_all(&snapshot_path)?;
         
-        // Create snapshot metadata
         let snapshot = Snapshot {
             id: id.clone(),
             name: name.to_string(),
@@ -46,23 +41,18 @@ impl RecoveryManager {
             include_packages,
         };
         
-        // Backup system configuration
         self.backup_system_config(&snapshot_path)?;
         
-        // Backup user data if requested
         if include_user_data {
             self.backup_user_data(&snapshot_path)?;
         }
         
-        // Backup package list if requested
         if include_packages {
             self.backup_package_list(&snapshot_path)?;
         }
         
-        // Calculate snapshot size
         let size = self.calculate_directory_size(&snapshot_path)?;
         
-        // Save snapshot metadata
         let metadata_path = snapshot_path.join("metadata.json");
         let metadata_content = serde_json::to_string_pretty(&snapshot)?;
         fs::write(&metadata_path, metadata_content)?;
@@ -89,7 +79,6 @@ impl RecoveryManager {
             }
         }
         
-        // Sort by creation date (newest first)
         snapshots.sort_by(|a, b| b.created_at.cmp(&a.created_at));
         
         Ok(snapshots)
@@ -111,20 +100,16 @@ impl RecoveryManager {
             return Err(RecoveryError::SnapshotNotFound(snapshot_id.to_string()));
         }
         
-        // Create backup of current system before restore
         if !force {
             self.create_snapshot("pre-restore", Some("Automatic backup before restore".to_string()), true, true)?;
         }
         
-        // Restore system configuration
         self.restore_system_config(&snapshot_path)?;
         
-        // Restore user data if included
         if snapshot.include_user_data {
             self.restore_user_data(&snapshot_path)?;
         }
         
-        // Restore packages if included
         if snapshot.include_packages {
             self.restore_packages(&snapshot_path)?;
         }
@@ -146,11 +131,9 @@ impl RecoveryManager {
             fs::remove_dir_all(&snapshot_path)?;
             log::info!("Deleted snapshot {}", snapshot.name);
         } else {
-            // Move to trash instead of deleting
-            let trash_dir = directories::data_dir()
-                .unwrap_or_else(|| PathBuf::from("~"))
-                .join("sigmaos")
-                .join("trash");
+            let trash_dir = directories::ProjectDirs::from("org", "sigmaos", "sigmaos")
+                .map(|p| p.data_dir().join("trash"))
+                .unwrap_or_else(|| PathBuf::from("~/.local/share/sigmaos/trash"));
             fs::create_dir_all(&trash_dir)?;
             fs::rename(&snapshot_path, trash_dir.join(&snapshot.id))?;
             log::info!("Moved snapshot {} to trash", snapshot.name);
@@ -179,9 +162,9 @@ impl RecoveryManager {
     }
     
     fn backup_system_config(&self, snapshot_path: &Path) -> Result<(), RecoveryError> {
-        let config_dir = directories::config_dir()
-            .unwrap_or_else(|| PathBuf::from("~"))
-            .join("sigmaos");
+        let config_dir = directories::ProjectDirs::from("org", "sigmaos", "sigmaos")
+            .map(|p| p.config_dir().to_path_buf())
+            .unwrap_or_else(|| PathBuf::from("~/.config/sigmaos"));
         
         let backup_dir = snapshot_path.join("config");
         fs::create_dir_all(&backup_dir)?;
@@ -190,7 +173,6 @@ impl RecoveryManager {
             self.copy_directory(&config_dir, &backup_dir)?;
         }
         
-        // Backup system configuration files
         let system_config_dir = PathBuf::from("/etc/sigmaos");
         if system_config_dir.exists() {
             let system_backup = snapshot_path.join("system-config");
@@ -202,9 +184,9 @@ impl RecoveryManager {
     }
     
     fn backup_user_data(&self, snapshot_path: &Path) -> Result<(), RecoveryError> {
-        let user_data_dir = directories::data_dir()
-            .unwrap_or_else(|| PathBuf::from("~"))
-            .join("sigmaos");
+        let user_data_dir = directories::ProjectDirs::from("org", "sigmaos", "sigmaos")
+            .map(|p| p.data_dir().to_path_buf())
+            .unwrap_or_else(|| PathBuf::from("~/.local/share/sigmaos"));
         
         let backup_dir = snapshot_path.join("user-data");
         fs::create_dir_all(&backup_dir)?;
@@ -219,7 +201,6 @@ impl RecoveryManager {
     fn backup_package_list(&self, snapshot_path: &Path) -> Result<(), RecoveryError> {
         let package_list_path = snapshot_path.join("packages.txt");
         
-        // Get installed packages
         let output = std::process::Command::new("pacman")
             .arg("-Q")
             .arg("--explicit")
@@ -234,23 +215,20 @@ impl RecoveryManager {
     
     fn restore_system_config(&self, snapshot_path: &Path) -> Result<(), RecoveryError> {
         let config_backup = snapshot_path.join("config");
-        let config_dir = directories::config_dir()
-            .unwrap_or_else(|| PathBuf::from("~"))
-            .join("sigmaos");
+        let config_dir = directories::ProjectDirs::from("org", "sigmaos", "sigmaos")
+            .map(|p| p.config_dir().to_path_buf())
+            .unwrap_or_else(|| PathBuf::from("~/.config/sigmaos"));
         
         if config_backup.exists() {
-            // Backup current config
             let current_backup = config_dir.join(".backup-before-restore");
             if config_dir.exists() {
                 self.copy_directory(&config_dir, &current_backup)?;
             }
             
-            // Restore from snapshot
             fs::create_dir_all(&config_dir)?;
             self.copy_directory(&config_backup, &config_dir)?;
         }
         
-        // Restore system configuration
         let system_config_backup = snapshot_path.join("system-config");
         let system_config_dir = PathBuf::from("/etc/sigmaos");
         
@@ -264,18 +242,16 @@ impl RecoveryManager {
     
     fn restore_user_data(&self, snapshot_path: &Path) -> Result<(), RecoveryError> {
         let user_data_backup = snapshot_path.join("user-data");
-        let user_data_dir = directories::data_dir()
-            .unwrap_or_else(|| PathBuf::from("~"))
-            .join("sigmaos");
+        let user_data_dir = directories::ProjectDirs::from("org", "sigmaos", "sigmaos")
+            .map(|p| p.data_dir().to_path_buf())
+            .unwrap_or_else(|| PathBuf::from("~/.local/share/sigmaos"));
         
         if user_data_backup.exists() {
-            // Backup current user data
             let current_backup = user_data_dir.join(".backup-before-restore");
             if user_data_dir.exists() {
                 self.copy_directory(&user_data_dir, &current_backup)?;
             }
             
-            // Restore from snapshot
             fs::create_dir_all(&user_data_dir)?;
             self.copy_directory(&user_data_backup, &user_data_dir)?;
         }
@@ -287,7 +263,6 @@ impl RecoveryManager {
         let package_list_path = snapshot_path.join("packages.txt");
         
         if package_list_path.exists() {
-            // Install packages from list
             let package_list = fs::read_to_string(&package_list_path)?;
             let packages: Vec<&str> = package_list.lines().collect();
             
@@ -362,17 +337,6 @@ impl RecoveryManager {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Snapshot {
-    pub id: String,
-    pub name: String,
-    pub description: Option<String>,
-    pub created_at: String,
-    pub size: u64,
-    pub include_user_data: bool,
-    pub include_packages: bool,
-}
-
-#[derive(Debug, Clone)]
 pub struct RecoveryStatus {
     pub snapshot_count: usize,
     pub total_size: u64,
