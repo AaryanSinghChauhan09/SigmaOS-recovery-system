@@ -1,13 +1,5 @@
 use clap::{Parser, Subcommand};
-use std::path::PathBuf;
-
-mod recovery;
-mod error;
-mod snapshot;
-mod restore;
-
-use recovery::RecoveryManager;
-use error::RecoveryError;
+use sigmaos_recovery_system::{RecoveryError, RecoveryManager};
 
 #[derive(Parser)]
 #[command(name = "sigmaos-recovery")]
@@ -69,13 +61,23 @@ enum Commands {
 
 fn main() -> Result<(), RecoveryError> {
     env_logger::init();
-    
+
     let cli = Cli::parse();
     let recovery_manager = RecoveryManager::new()?;
-    
+
     match cli.command {
-        Commands::Snapshot { name, description, include_user_data, include_packages } => {
-            let snapshot = recovery_manager.create_snapshot(&name, description, include_user_data, include_packages)?;
+        Commands::Snapshot {
+            name,
+            description,
+            include_user_data,
+            include_packages,
+        } => {
+            let snapshot = recovery_manager.create_snapshot(
+                &name,
+                description,
+                include_user_data,
+                include_packages,
+            )?;
             println!("Snapshot created successfully");
             println!("Name: {}", snapshot.name);
             println!("ID: {}", snapshot.id);
@@ -102,7 +104,11 @@ fn main() -> Result<(), RecoveryError> {
                 }
             }
         }
-        Commands::Restore { snapshot, dry_run, force } => {
+        Commands::Restore {
+            snapshot,
+            dry_run,
+            force,
+        } => {
             if dry_run {
                 let snapshot_info = recovery_manager.get_snapshot_info(&snapshot)?;
                 println!("Dry run - would restore snapshot:");
@@ -125,7 +131,7 @@ fn main() -> Result<(), RecoveryError> {
             println!("  Snapshots: {}", status.snapshot_count);
             println!("  Total size: {} bytes", status.total_size);
             println!("  Last snapshot: {}", status.last_snapshot);
-            
+
             if detailed {
                 println!("\nSnapshot details:");
                 for snapshot in status.snapshots {
@@ -134,6 +140,6 @@ fn main() -> Result<(), RecoveryError> {
             }
         }
     }
-    
+
     Ok(())
 }

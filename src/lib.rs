@@ -1,10 +1,10 @@
 #![forbid(unsafe_code)]
 
-pub mod recovery;
 pub mod error;
-pub mod snapshot;
+pub mod recovery;
 pub mod restore;
+pub mod snapshot;
 
-pub use recovery::RecoveryManager;
 pub use error::RecoveryError;
+pub use recovery::RecoveryManager;
 pub use snapshot::Snapshot;
