@@ -20,10 +20,10 @@ enum Commands {
         #[arg(short, long)]
         description: Option<String>,
         /// Include user data
-        #[arg(short, long)]
+        #[arg(short = 'u', long)]
         include_user_data: bool,
         /// Include system packages
-        #[arg(short, long)]
+        #[arg(short = 'p', long)]
         include_packages: bool,
     },
     /// List available snapshots
