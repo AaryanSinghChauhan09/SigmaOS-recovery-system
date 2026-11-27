@@ -208,11 +208,22 @@ impl RecoveryManager {
         Ok(())
     }
 
+    fn pkg_bin() -> String {
+        std::env::var("SIGMA_PKG_BIN").unwrap_or_else(|_| "sigma-pkg".to_string())
+    }
+
+    fn parse_package_list(raw: &str) -> Vec<&str> {
+        raw.lines()
+            .map(str::trim)
+            .filter(|line| !line.is_empty() && !line.starts_with('#'))
+            .collect()
+    }
+
     fn backup_package_list(&self, snapshot_path: &Path) -> Result<(), RecoveryError> {
         let package_list_path = snapshot_path.join("packages.txt");
 
-        let output = std::process::Command::new("pacman")
-            .arg("-Q")
+        let output = std::process::Command::new(Self::pkg_bin())
+            .arg("list")
             .arg("--explicit")
             .output()?;
 
@@ -274,20 +285,19 @@ impl RecoveryManager {
 
         if package_list_path.exists() {
             let package_list = fs::read_to_string(&package_list_path)?;
-            let packages: Vec<&str> = package_list.lines().collect();
+            let packages = Self::parse_package_list(&package_list);
+            let pkg_bin = Self::pkg_bin();
 
             for package in packages {
-                if !package.is_empty() {
-                    let status = std::process::Command::new("sudo")
-                        .arg("pacman")
-                        .arg("-S")
-                        .arg("--noconfirm")
-                        .arg(package)
-                        .status()?;
+                let status = std::process::Command::new("sudo")
+                    .arg(&pkg_bin)
+                    .arg("install")
+                    .arg("--yes")
+                    .arg(package)
+                    .status()?;
 
-                    if !status.success() {
-                        log::warn!("Failed to install package: {}", package);
-                    }
+                if !status.success() {
+                    log::warn!("Failed to install package: {}", package);
                 }
             }
         }
@@ -352,4 +362,27 @@ pub struct RecoveryStatus {
     pub total_size: u64,
     pub last_snapshot: String,
     pub snapshots: Vec<Snapshot>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_package_list_ignores_blanks_and_comments_aaa() {
+        // Arrange
+        let raw = "# system packages\n  sigma-pkg  \n\n  sigma-sh\n# end\n";
+        // Act
+        let pkgs = RecoveryManager::parse_package_list(raw);
+        // Assert
+        assert_eq!(pkgs, vec!["sigma-pkg", "sigma-sh"]);
+    }
+
+    #[test]
+    fn test_sigma_pkg_bin_defaults_to_sigma_pkg_aaa() {
+        // Arrange & Act
+        let bin = RecoveryManager::pkg_bin();
+        // Assert
+        assert!(!bin.is_empty());
+    }
 }
