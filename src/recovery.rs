@@ -385,4 +385,34 @@ mod tests {
         // Assert
         assert!(!bin.is_empty());
     }
+    #[test]
+    fn test_parse_package_list_empty_string_returns_empty_aaa() {
+        // Arrange
+        let raw = "";
+        // Act
+        let pkgs = RecoveryManager::parse_package_list(raw);
+        // Assert
+        assert!(pkgs.is_empty());
+    }
+
+    #[test]
+    fn test_parse_package_list_all_comments_returns_empty_aaa() {
+        // Arrange
+        let raw = "# only comments\n# nothing else\n";
+        // Act
+        let pkgs = RecoveryManager::parse_package_list(raw);
+        // Assert
+        assert!(pkgs.is_empty());
+    }
+
+    #[test]
+    fn test_parse_package_list_trims_whitespace_aaa() {
+        // Arrange
+        let raw = "  sigma-kernel  \n   sigma-net  \n";
+        // Act
+        let pkgs = RecoveryManager::parse_package_list(raw);
+        // Assert
+        assert_eq!(pkgs, vec!["sigma-kernel", "sigma-net"]);
+    }
+
 }
